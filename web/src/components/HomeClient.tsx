@@ -4,22 +4,49 @@ import { useState } from "react";
 import UploadBox from "@/components/UploadBox";
 
 export default function HomeClient() {
-  const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] =
+    useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [message, setMessage] = useState<string>("");
 
-  function handleSelect(f: File) {
-    setFile(f);
-    console.log("Selected file:", f.name, f.type, f.size);
+  async function handleSelect(file: File) {
+    setStatus("uploading");
+    setMessage("Uploading...");
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: form,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Upload failed");
+      }
+
+      setStatus("done");
+      setMessage(
+        `Received ${data.name} (${Math.round(Number(data.size) / 1024)} KB)`
+      );
+      console.log("Server response:", data);
+    } catch (err: any) {
+      console.error(err);
+      setStatus("error");
+      setMessage(err?.message || "Upload failed");
+    }
   }
 
   return (
     <div className="mt-12">
       <UploadBox onValidSelect={handleSelect} />
-      {file && (
-        <p className="mt-2 text-sm text-gray-500">
-          Selected: {file.name}
+      {status !== "idle" && (
+        <p className="mt-2 text-sm text-gray-600">
+          {status === "uploading" ? "Uploading..." : message}
         </p>
       )}
     </div>
   );
 }
-
