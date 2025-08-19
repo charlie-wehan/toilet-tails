@@ -1,3 +1,5 @@
+import HomeClient from "@/components/HomeClient";
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-white text-gray-900">
@@ -19,7 +21,7 @@ export default function Home() {
         <div className="grid md:grid-cols-2 gap-10 items-center">
           <div>
             <h2 className="text-4xl md:text-5xl font-bold leading-tight">
-              Turn your pet’s photo into a
+              Turn your pet's photo into a
               <span className="block text-indigo-600">hilariously realistic bathroom scene</span>
             </h2>
             <p className="mt-4 text-lg text-gray-600">
@@ -41,18 +43,8 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="relative">
-            <div className="aspect-[4/3] w-full rounded-3xl border bg-gradient-to-br from-gray-50 to-white grid place-items-center">
-              <div className="text-center px-6">
-                <div className="text-6xl mb-3">🐶🧻🪞🛁</div>
-                <p className="text-gray-600">
-                  Preview area — we’ll render your pet here later.
-                </p>
-              </div>
-            </div>
-            <div className="absolute -bottom-4 -right-4 rounded-2xl border bg-white px-3 py-2 text-sm shadow-sm">
-              Coming soon: upload → render in seconds
-            </div>
+          <div className="mt-12">
+            <HomeClient />
           </div>
         </div>
       </section>
