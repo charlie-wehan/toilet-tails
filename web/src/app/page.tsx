@@ -30,9 +30,9 @@ export default function Home() {
             </p>
 
             <div className="mt-8 flex gap-3">
-              <button className="rounded-2xl px-5 py-3 bg-indigo-600 text-white font-medium hover:opacity-90">
+              <a href="#upload" className="rounded-2xl px-5 py-3 bg-indigo-600 text-white font-medium hover:opacity-90">
                 Upload a photo
-              </button>
+              </a>
               <button className="rounded-2xl px-5 py-3 border font-medium hover:bg-gray-50">
                 See examples
               </button>

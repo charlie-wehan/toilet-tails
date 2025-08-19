@@ -6,3 +6,7 @@ node_modules/
 # Ignore saved uploads
 web/public/uploads/*
 !web/public/uploads/.gitkeep
+
+# Ignore local dev DB
+web/prisma/*.db
+web/prisma/*.db-journal

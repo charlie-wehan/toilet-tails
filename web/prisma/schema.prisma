@@ -1,0 +1,40 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Upload {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  url       String
+  name      String
+  type      String
+  size      Int
+  scene     String?
+  createdAt DateTime @default(now())
+
+  renderJobs RenderJob[]
+
+  @@index([createdAt])
+}
+
+model RenderJob {
+  id        String   @id @default(cuid())
+  uploadId  String
+  status    String   // 'queued' | 'processing' | 'complete' | 'failed'
+  resultUrl String?
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  upload Upload @relation(fields: [uploadId], references: [id])
+
+  @@index([status, createdAt])
+}
