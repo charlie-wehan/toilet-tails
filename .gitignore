@@ -2,3 +2,7 @@ node_modules/
 .next/
 .env*
 .DS_Store
+
+# Ignore saved uploads
+web/public/uploads/*
+!web/public/uploads/.gitkeep
