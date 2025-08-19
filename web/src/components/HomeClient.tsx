@@ -10,10 +10,17 @@ export default function HomeClient() {
   const [status, setStatus] = useState<State>("idle");
   const [message, setMessage] = useState<string>("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [scene, setScene] = useState<SceneId>(SCENES[0].id);
+  const [scene, setScene] = useState<SceneId | null>(null); // ← no default
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   async function handleSelect(file: File) {
+    // Guard: require a scene first (UploadBox is also disabled until then)
+    if (!scene) {
+      setStatus("error");
+      setMessage("Please choose a scene above first.");
+      return;
+    }
+
     setStatus("uploading");
     setMessage("Uploading...");
     setImageUrl(null);
@@ -21,7 +28,7 @@ export default function HomeClient() {
     try {
       const form = new FormData();
       form.append("file", file);
-      form.append("scene", scene); // include scene choice
+      form.append("scene", scene); // safe: scene is not null here
 
       const res = await fetch("/api/upload", { method: "POST", body: form });
       const data = await res.json();
@@ -30,7 +37,7 @@ export default function HomeClient() {
         throw new Error(data?.error || "Upload failed");
       }
 
-      const sceneLabel = SCENES.find((s) => s.id === scene)?.label ?? scene;
+      const sceneLabel = SCENES.find((s) => s.id === scene)?.label ?? String(scene);
 
       setStatus("done");
       setMessage(
@@ -56,10 +63,10 @@ export default function HomeClient() {
   return (
     <div id="upload" ref={containerRef} className="mt-12">
       <div className="mb-6">
-        <ScenePicker value={scene} onChange={setScene} />
+        <ScenePicker value={scene} onChange={setScene as (s: SceneId) => void} />
       </div>
 
-      <UploadBox onValidSelect={handleSelect} />
+      <UploadBox onValidSelect={handleSelect} disabled={!scene} />
 
       {status !== "idle" && (
         <div className="mt-2 flex items-center gap-3 text-sm text-gray-600">

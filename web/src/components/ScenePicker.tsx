@@ -12,13 +12,12 @@ export const SCENES = [
 export type SceneId = (typeof SCENES)[number]["id"];
 
 type Props = {
-  value?: SceneId;
+  value?: SceneId | null; // allow "no selection"
   onChange?: (scene: SceneId) => void;
 };
 
-export default function ScenePicker({ value, onChange }: Props) {
-  // If parent doesn't control value, manage it internally
-  const selected = value ?? SCENES[0].id;
+export default function ScenePicker({ value = null, onChange }: Props) {
+  const selected: SceneId | null = value ?? null;
 
   function select(id: SceneId) {
     onChange?.(id);
@@ -27,7 +26,9 @@ export default function ScenePicker({ value, onChange }: Props) {
   return (
     <div className="w-full">
       <h3 className="text-lg font-semibold">Choose a scene</h3>
-      <p className="text-sm text-gray-500">We'll guide the AI with this vibe.</p>
+      <p className="text-sm text-gray-500">
+        Select one to enable uploading.
+      </p>
 
       <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3">
         {SCENES.map((s) => (
@@ -40,6 +41,7 @@ export default function ScenePicker({ value, onChange }: Props) {
                 ? "ring-2 ring-indigo-600 border-indigo-600"
                 : "hover:bg-gray-50"
             }`}
+            aria-pressed={selected === s.id}
           >
             <div className="text-2xl">{s.emoji}</div>
             <div className="mt-2 text-sm font-medium">{s.label}</div>

@@ -4,14 +4,16 @@ import { useRef, useState } from "react";
 
 type Props = {
   onValidSelect?: (file: File) => void;
+  disabled?: boolean;
 };
 
-export default function UploadBox({ onValidSelect }: Props) {
+export default function UploadBox({ onValidSelect, disabled = false }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function openPicker() {
+    if (disabled) return;
     inputRef.current?.click();
   }
 
@@ -59,7 +61,12 @@ export default function UploadBox({ onValidSelect }: Props) {
           </div>
           <button
             onClick={openPicker}
-            className="rounded-2xl px-4 py-2 bg-indigo-600 text-white font-medium hover:opacity-90"
+            disabled={disabled}
+            className={`rounded-2xl px-4 py-2 font-medium transition ${
+              disabled
+                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                : "bg-indigo-600 text-white hover:opacity-90"
+            }`}
           >
             Choose file
           </button>
@@ -82,12 +89,17 @@ export default function UploadBox({ onValidSelect }: Props) {
               />
             </div>
             <p className="mt-2 text-sm text-gray-500">
-              Nice! We’ll send this to the AI next.
+              Nice! We'll send this to the AI next.
             </p>
           </div>
         ) : (
           <div className="mt-6 grid place-items-center rounded-2xl border border-dashed p-10 text-center text-gray-500">
-            <div>No file selected — click “Choose file” above.</div>
+            <div>
+              {disabled 
+                ? "Please choose a scene above first." 
+                : "No file selected — click \"Choose file\" above."
+              }
+            </div>
           </div>
         )}
       </div>
