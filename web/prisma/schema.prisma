@@ -18,6 +18,8 @@ model Upload {
   type      String
   size      Int
   scene     String?
+  bgKey     String?   // ← optional background file key
+  bgUrl     String?   // ← optional background file URL
   createdAt DateTime @default(now())
 
   renderJobs RenderJob[]

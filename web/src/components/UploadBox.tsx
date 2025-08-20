@@ -5,9 +5,16 @@ import { useRef, useState } from "react";
 type Props = {
   onValidSelect?: (file: File) => void;
   disabled?: boolean;
+  title?: string;
+  hint?: string;
 };
 
-export default function UploadBox({ onValidSelect, disabled = false }: Props) {
+export default function UploadBox({
+  onValidSelect,
+  disabled = false,
+  title = "Upload your pet photo",
+  hint = "PNG, JPG, or WEBP up to 10MB.",
+}: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +29,6 @@ export default function UploadBox({ onValidSelect, disabled = false }: Props) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Basic validation: type + size (10MB limit)
     const isImage = /^image\/(png|jpe?g|webp)$/i.test(file.type);
     if (!isImage) {
       setError("Please choose a PNG, JPG, or WEBP image.");
@@ -54,18 +60,22 @@ export default function UploadBox({ onValidSelect, disabled = false }: Props) {
       <div className="rounded-3xl border bg-white p-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h3 className="text-lg font-semibold">Upload your pet photo</h3>
-            <p className="text-sm text-gray-500">
-              PNG, JPG, or WEBP up to 10MB.
-            </p>
+            <h3 className="text-lg font-semibold">{title}</h3>
+            <p className="text-sm text-gray-500">{hint}</p>
+            {disabled && (
+              <p className="mt-2 text-sm text-amber-600">
+                Choose a scene above before uploading.
+              </p>
+            )}
           </div>
           <button
             onClick={openPicker}
             disabled={disabled}
-            className={`rounded-2xl px-4 py-2 font-medium transition ${
+            aria-disabled={disabled}
+            className={`rounded-2xl px-4 py-2 text-white font-medium ${
               disabled
-                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                : "bg-indigo-600 text-white hover:opacity-90"
+                ? "bg-gray-300 cursor-not-allowed opacity-70"
+                : "bg-indigo-600 hover:opacity-90"
             }`}
           >
             Choose file
@@ -84,7 +94,7 @@ export default function UploadBox({ onValidSelect, disabled = false }: Props) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={previewUrl}
-                alt="Selected pet preview"
+                alt="Selected preview"
                 className="h-full w-full object-cover"
               />
             </div>
@@ -94,12 +104,7 @@ export default function UploadBox({ onValidSelect, disabled = false }: Props) {
           </div>
         ) : (
           <div className="mt-6 grid place-items-center rounded-2xl border border-dashed p-10 text-center text-gray-500">
-            <div>
-              {disabled 
-                ? "Please choose a scene above first." 
-                : "No file selected — click \"Choose file\" above."
-              }
-            </div>
+            <div>No file selected — click "Choose file" above.</div>
           </div>
         )}
       </div>
