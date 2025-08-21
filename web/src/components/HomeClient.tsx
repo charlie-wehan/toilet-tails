@@ -3,14 +3,15 @@
 import { useState, useRef } from "react";
 import UploadBox from "@/components/UploadBox";
 import ScenePicker, { SCENES, SceneId } from "@/components/ScenePicker";
+import { supabaseClient } from "@/lib/supabaseClient";
 
 type State = "idle" | "uploading" | "done" | "error";
 
 export default function HomeClient() {
   const [status, setStatus] = useState<State>("idle");
   const [message, setMessage] = useState<string>("");
-  const [imageUrl, setImageUrl] = useState<string | null>(null); // pet (saved)
-  const [bgUrl, setBgUrl] = useState<string | null>(null);        // background (saved)
+  const [imageUrl, setImageUrl] = useState<string | null>(null); // pet (signed preview)
+  const [bgUrl, setBgUrl] = useState<string | null>(null);        // background (signed preview)
 
   const [uploadId, setUploadId] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
@@ -22,6 +23,23 @@ export default function HomeClient() {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  async function signForUpload(name: string, type: string) {
+    const res = await fetch("/api/storage/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, type }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) throw new Error(data?.error || "Sign failed");
+    return data as { bucket: string; key: string; token: string };
+  }
+
+  async function directUpload(bucket: string, key: string, token: string, file: File) {
+    const up = await supabaseClient.storage.from(bucket).uploadToSignedUrl(key, token, file);
+    if (up.error) throw new Error(up.error.message);
+    return { bucket, key };
+  }
+
   async function handleSelect(file: File) {
     if (!scene) {
       setStatus("error");
@@ -30,36 +48,51 @@ export default function HomeClient() {
     }
 
     setStatus("uploading");
-    setMessage("Uploading...");
+    setMessage("Uploading directly to storage…");
     setImageUrl(null);
     setBgUrl(null);
     setResultUrl(null);
     setRenderMsg("");
 
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("scene", scene);
-      if (bgFile) form.append("bg", bgFile);
+      // 1) If background provided, upload it first
+      let bgMeta: { key: string; name: string; type: string; size: number } | null = null;
+      if (bgFile) {
+        const signedBg = await signForUpload(bgFile.name, bgFile.type);
+        await directUpload(signedBg.bucket, signedBg.key, signedBg.token, bgFile);
+        bgMeta = { key: signedBg.key, name: bgFile.name, type: bgFile.type, size: bgFile.size };
+      }
 
-      const res = await fetch("/api/upload", { method: "POST", body: form });
-      const data = await res.json();
+      // 2) Upload pet image
+      const signedPet = await signForUpload(file.name, file.type);
+      await directUpload(signedPet.bucket, signedPet.key, signedPet.token, file);
 
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Upload failed");
+      // 3) Commit metadata on server (creates DB row + returns signed preview URLs)
+      const commitRes = await fetch("/api/upload/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pet: { key: signedPet.key, name: file.name, type: file.type, size: file.size },
+          bg: bgMeta ?? undefined,
+          scene,
+        }),
+      });
+      const committed = await commitRes.json();
+      if (!commitRes.ok || !committed?.ok) {
+        throw new Error(committed?.error || "Commit failed");
       }
 
       const sceneLabel = SCENES.find((s) => s.id === scene)?.label ?? String(scene);
 
       setStatus("done");
       setMessage(
-        `Saved ${data.name} (${Math.round(Number(data.size) / 1024)} KB) — Scene: ${sceneLabel}${
-          data.bgUrl ? " + Background" : ""
+        `Saved ${file.name} (${Math.round(Number(file.size) / 1024)} KB) — Scene: ${sceneLabel}${
+          committed.bgUrl ? " + Background" : ""
         }`
       );
-      setImageUrl(data.url || null);
-      setBgUrl(data.bgUrl || null);
-      setUploadId(data.uploadId || null);
+      setImageUrl(committed.url || null);
+      setBgUrl(committed.bgUrl || null);
+      setUploadId(committed.uploadId || null);
 
       containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (err: any) {
@@ -69,7 +102,7 @@ export default function HomeClient() {
     }
   }
 
-  // Poll the render status until complete/failed or timeout
+  // Polling + render button (unchanged)
   async function pollRenderStatus(id: string, maxMs = 60_000, intervalMs = 1500) {
     const start = Date.now();
     while (Date.now() - start < maxMs) {
@@ -92,7 +125,6 @@ export default function HomeClient() {
     setResultUrl(null);
 
     try {
-      // Kick off render job
       const res = await fetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,7 +135,6 @@ export default function HomeClient() {
         throw new Error(data?.error || "Render failed to start");
       }
 
-      // Poll for status (works for both instant + long jobs)
       const out = await pollRenderStatus(uploadId);
       if (out.status === "complete") {
         setResultUrl(out.url || null);
@@ -170,7 +201,7 @@ export default function HomeClient() {
         <div className="mt-4 grid md:grid-cols-2 gap-4">
           {bgUrl && (
             <div>
-              <div className="text-sm text-gray-500 mb-2">Background (saved)</div>
+              <div className="text-sm text-gray-500 mb-2">Background (signed)</div>
               <div className="aspect-[4/3] w-full overflow-hidden rounded-2xl border">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={bgUrl} alt="Saved background" className="h-full w-full object-cover" />
@@ -179,7 +210,7 @@ export default function HomeClient() {
           )}
           {imageUrl && (
             <div>
-              <div className="text-sm text-gray-500 mb-2">Pet (saved)</div>
+              <div className="text-sm text-gray-500 mb-2">Pet (signed)</div>
               <div className="aspect-[4/3] w-full overflow-hidden rounded-2xl border">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={imageUrl} alt="Saved pet" className="h-full w-full object-cover" />
