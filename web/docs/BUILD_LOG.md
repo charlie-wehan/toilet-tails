@@ -22,11 +22,11 @@ _Last updated: 2025-08-21_
 
 ## Env vars (web/.env.local)
 DATABASE_URL="file:./prisma/dev.db"
-SUPABASE_URL="https://eqbvbysrnabsnrflxjis.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVxYnZieXNybmFic25yZmx4amlzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTc0NTcyMiwiZXhwIjoyMDcxMzIxNzIyfQ.f31il5NO_ljBVsrXFHAIJfy9EEF35MLvOthM8X-gsWI" # server-only
+SUPABASE_URL="your-supabase-url"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key" # server-only
 SUPABASE_BUCKET="uploads"
-NEXT_PUBLIC_SUPABASE_URL="https://eqbvbysrnabsnrflxjis.supabase.co "
-NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVxYnZieXNybmFic25yZmx4amlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NDU3MjIsImV4cCI6MjA3MTMyMTcyMn0.SjENSpaW8RGg6bnCxXhE8GHu6zKAJJ951BnlqW25agU"
+NEXT_PUBLIC_SUPABASE_URL="your-supabase-url"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
 
 ## API contracts
 **POST `/api/storage/sign`** → `{ bucket, key, token }` for one-time direct upload.  
