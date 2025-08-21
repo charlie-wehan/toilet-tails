@@ -12,15 +12,12 @@ export default function HomeClient() {
   const [imageUrl, setImageUrl] = useState<string | null>(null); // pet (saved)
   const [bgUrl, setBgUrl] = useState<string | null>(null);        // background (saved)
 
-  const [uploadId, setUploadId] = useState<string | null>(null);  // ← needed for render call
+  const [uploadId, setUploadId] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [renderMsg, setRenderMsg] = useState<string>("");
-  const [resultUrl, setResultUrl] = useState<string | null>(null); // stubbed result
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
 
-  // Scene must be chosen first
   const [scene, setScene] = useState<SceneId | null>(null);
-
-  // Optional bathroom background file (client-side only; server returns bgUrl)
   const [bgFile, setBgFile] = useState<File | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -41,9 +38,9 @@ export default function HomeClient() {
 
     try {
       const form = new FormData();
-      form.append("file", file);          // pet image
-      form.append("scene", scene);        // selected scene
-      if (bgFile) form.append("bg", bgFile); // optional bathroom background
+      form.append("file", file);
+      form.append("scene", scene);
+      if (bgFile) form.append("bg", bgFile);
 
       const res = await fetch("/api/upload", { method: "POST", body: form });
       const data = await res.json();
@@ -72,6 +69,22 @@ export default function HomeClient() {
     }
   }
 
+  // Poll the render status until complete/failed or timeout
+  async function pollRenderStatus(id: string, maxMs = 60_000, intervalMs = 1500) {
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      const r = await fetch(`/api/render/${id}`);
+      const j = await r.json();
+      if (r.ok && j?.ok) {
+        const job = j.job;
+        if (job.status === "complete") return { status: "complete", url: job.resultUrl as string | null };
+        if (job.status === "failed") return { status: "failed", error: job.error || "Render failed" };
+      }
+      await new Promise((res) => setTimeout(res, intervalMs));
+    }
+    return { status: "timeout", error: "Render timed out" };
+  }
+
   async function generate() {
     if (!uploadId) return;
     setRendering(true);
@@ -79,6 +92,7 @@ export default function HomeClient() {
     setResultUrl(null);
 
     try {
+      // Kick off render job
       const res = await fetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -86,10 +100,17 @@ export default function HomeClient() {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Render failed");
+        throw new Error(data?.error || "Render failed to start");
       }
-      setResultUrl(data.job?.resultUrl ?? null);
-      setRenderMsg("Done!");
+
+      // Poll for status (works for both instant + long jobs)
+      const out = await pollRenderStatus(uploadId);
+      if (out.status === "complete") {
+        setResultUrl(out.url || null);
+        setRenderMsg("Done!");
+      } else {
+        setRenderMsg((out as any).error || "Render failed");
+      }
     } catch (err: any) {
       console.error(err);
       setRenderMsg(err?.message || "Render failed");
@@ -185,7 +206,7 @@ export default function HomeClient() {
 
       {resultUrl && (
         <div className="mt-4">
-          <div className="text-sm text-gray-500 mb-2">Result (stub)</div>
+          <div className="text-sm text-gray-500 mb-2">Result</div>
           <div className="aspect-[4/3] w-full overflow-hidden rounded-2xl border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={resultUrl} alt="Generated result" className="h-full w-full object-cover" />
