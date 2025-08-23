@@ -6,14 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "inngest:dev": "npx inngest dev"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.6.2",
+    "@fal-ai/serverless-client": "^0.15.0",
     "@prisma/client": "^6.14.0",
     "@supabase/supabase-js": "^2.55.0",
+    "inngest": "^3.40.1",
     "next": "15.4.7",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "replicate": "^1.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

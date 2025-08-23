@@ -21,6 +21,11 @@ export default function HomeClient() {
   const [scene, setScene] = useState<SceneId | null>(null);
   const [bgFile, setBgFile] = useState<File | null>(null);
 
+  // Generation controls
+  const [identityStrength, setIdentityStrength] = useState<number>(0.35); // 0.25–0.6
+  const [aspectRatio, setAspectRatio] = useState<string>("square"); // square | landscape_4_3 | portrait_4_3
+  const [upscale, setUpscale] = useState<boolean>(false);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   async function signForUpload(name: string, type: string) {
@@ -103,19 +108,40 @@ export default function HomeClient() {
   }
 
   // Polling + render button (unchanged)
-  async function pollRenderStatus(id: string, maxMs = 60_000, intervalMs = 1500) {
+  async function pollRenderStatus(id: string, maxMs = 300_000, intervalMs = 2000) {
     const start = Date.now();
+    let attempts = 0;
+    
     while (Date.now() - start < maxMs) {
-      const r = await fetch(`/api/render/${id}`);
-      const j = await r.json();
-      if (r.ok && j?.ok) {
-        const job = j.job;
-        if (job.status === "complete") return { status: "complete", url: job.resultUrl as string | null };
-        if (job.status === "failed") return { status: "failed", error: job.error || "Render failed" };
+      attempts++;
+      try {
+        const r = await fetch(`/api/render/${id}`);
+        const j = await r.json();
+        
+        if (r.ok && j?.ok) {
+          const job = j.job;
+          
+          // Update status message based on job status
+          if (job.status === "queued") {
+            setRenderMsg(`Queued... (attempt ${attempts})`);
+          } else if (job.status === "processing") {
+            setRenderMsg(`Processing... (attempt ${attempts})`);
+          } else if (job.status === "complete") {
+            return { status: "complete", url: job.resultUrl as string | null };
+          } else if (job.status === "failed") {
+            return { status: "failed", error: job.error || "Render failed" };
+          }
+        } else {
+          console.error("Poll response error:", j);
+        }
+      } catch (error) {
+        console.error("Poll request failed:", error);
       }
+      
       await new Promise((res) => setTimeout(res, intervalMs));
     }
-    return { status: "timeout", error: "Render timed out" };
+    
+    return { status: "timeout", error: "Render timed out after 5 minutes" };
   }
 
   async function generate() {
@@ -128,7 +154,14 @@ export default function HomeClient() {
       const res = await fetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uploadId }),
+        body: JSON.stringify({
+          uploadId,
+          options: {
+            identityStrength,
+            aspectRatio,
+            upscale,
+          },
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
@@ -165,6 +198,43 @@ export default function HomeClient() {
     <div id="upload" ref={containerRef} className="mt-12">
       <div className="mb-6">
         <ScenePicker value={scene} onChange={setScene as (s: SceneId) => void} />
+      </div>
+
+      {/* Controls */}
+      <div className="mb-6 grid md:grid-cols-3 gap-4 items-end">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Identity strength</label>
+          <input
+            type="range"
+            min={0.25}
+            max={0.6}
+            step={0.05}
+            value={identityStrength}
+            onChange={(e) => setIdentityStrength(Number(e.target.value))}
+            className="w-full"
+          />
+          <div className="text-xs text-gray-500 mt-1">{identityStrength.toFixed(2)}</div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Aspect ratio</label>
+          <select
+            value={aspectRatio}
+            onChange={(e) => setAspectRatio(e.target.value)}
+            className="w-full rounded-lg border px-3 py-2"
+          >
+            <option value="square">Square (1:1)</option>
+            <option value="landscape_4_3">Landscape 4:3</option>
+            <option value="portrait_4_3">Portrait 4:3</option>
+          </select>
+        </div>
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={upscale}
+            onChange={(e) => setUpscale(e.target.checked)}
+          />
+          <span className="text-sm text-gray-700">Upscale</span>
+        </label>
       </div>
 
       <div className="mb-6">

@@ -9,10 +9,10 @@ export const runtime = "nodejs";
  */
 export async function GET(
   _req: Request,
-  { params }: { params: { uploadId: string } }
+  { params }: { params: Promise<{ uploadId: string }> }
 ) {
   try {
-    const { uploadId } = params;
+    const { uploadId } = await params;
 
     // make sure the upload exists (optional but nice)
     const upload = await prisma.upload.findUnique({ where: { id: uploadId } });

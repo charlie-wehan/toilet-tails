@@ -33,6 +33,11 @@ model RenderJob {
   status    String   // 'queued' | 'processing' | 'complete' | 'failed'
   resultUrl String?
   error     String?
+  
+  // AI Pipeline tracking
+  aiSteps   Json?    // Store step results as JSON
+  finalKey  String?  // Final AI result storage key
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
