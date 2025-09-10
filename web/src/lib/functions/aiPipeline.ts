@@ -5,6 +5,8 @@ import { removeBackground } from "@/lib/rembg";
 import { checkBucketAccess } from "@/lib/checkBucket";
 import { runReplicatePrediction } from "@/lib/replicateHttp";
 import { fal } from "@/lib/fal";
+import { createCenteredMaskPng } from "@/lib/mask";
+import sharp from "sharp";
 
 /**
  * Step 1: Pet Masking - Extract pet from background using REMBG
@@ -25,6 +27,7 @@ type GenerateOptions = {
 };
 
 export async function composeScene(
+  uploadId: string,
   petImageUrl: string, 
   sceneType: keyof typeof SCENE_TEMPLATES,
   bgImageUrl?: string,
@@ -41,13 +44,123 @@ export async function composeScene(
     console.log("Attempting scene generation with options:", options);
     
     try {
-      // Route through FAL Kontext img2img per official docs
+      // If a background is provided, prefer inpaint fill model first
+      if (bgImageUrl) {
+        try {
+          console.log("Background provided: using FAL flux-pro/v1/fill inpaint mode");
+          // Download background to get exact dimensions
+          const bgResp = await fetch(bgImageUrl);
+          if (!bgResp.ok) throw new Error(`Failed to download background image: ${bgResp.status}`);
+          const bgBuffer = Buffer.from(await bgResp.arrayBuffer());
+          const meta = await sharp(bgBuffer).metadata();
+          const canvasW = meta.width || 1024;
+          const canvasH = meta.height || 1024;
+          // Define mask region as a lower-middle rectangle proportional to background size
+          const region = {
+            width: Math.max(1, Math.floor(canvasW * 0.47)),
+            height: Math.max(1, Math.floor(canvasH * 0.53)),
+          } as any;
+          region.left = Math.max(0, Math.floor((canvasW - region.width) / 2));
+          region.top = Math.max(0, Math.min(canvasH - region.height, Math.floor(canvasH * 0.37)));
+          console.log("Inpaint mask region:", { ...region, canvasW, canvasH });
+          // Build mask with the SAME size as background (required by model)
+          const blackCanvas = await sharp({
+            create: {
+              width: canvasW,
+              height: canvasH,
+              channels: 4,
+              background: { r: 0, g: 0, b: 0, alpha: 1 },
+            },
+          })
+            .png()
+            .toBuffer();
+          const whiteRect = await sharp({
+            create: {
+              width: region.width,
+              height: region.height,
+              channels: 4,
+              background: { r: 255, g: 255, b: 255, alpha: 1 },
+            },
+          })
+            .png()
+            .toBuffer();
+          const maskBuf = await sharp(blackCanvas)
+            .composite([
+              { input: whiteRect, left: region.left, top: region.top, blend: "over" },
+            ])
+            .png()
+            .toBuffer();
+          const maskDataUrl = `data:image/png;base64,${maskBuf.toString("base64")}`;
+          // Save mask PNG to Supabase and use a signed URL (some endpoints reject data URLs)
+          try {
+            const sb = supabaseServer();
+            const BUCKET = process.env.SUPABASE_BUCKET!;
+            const maskKey = `ai-results/${uploadId}/inpaint-mask-${Date.now()}.png`;
+            const { error: upErr } = await sb.storage.from(BUCKET).upload(maskKey, Buffer.from(maskBuf), {
+              contentType: "image/png",
+              upsert: false,
+            });
+            if (upErr) {
+              console.warn("Mask upload failed; will fall back to data URL:", upErr.message);
+            } else {
+              const { data: signedMask, error: signErr } = await sb.storage.from(BUCKET).createSignedUrl(maskKey, 60 * 60);
+              if (!signErr && signedMask?.signedUrl) {
+                console.log("Using signed mask URL for inpaint");
+                // Replace with URL for model input
+                // Note: keep data URL as fallback in case URL fails
+                (global as any).__mask_url__ = signedMask.signedUrl;
+              }
+            }
+          } catch (e) {
+            console.warn("Mask save/sign failed; proceeding with data URL", e);
+          }
+
+          const maskUrlForModel = (global as any).__mask_url__ || maskDataUrl;
+          const result: any = await fal.subscribe("fal-ai/flux-pro/v1/fill", {
+            input: {
+              image_url: bgImageUrl, // background canvas (URL)
+              mask_url: maskUrlForModel, // mask URL
+              prompt: `${scenePrompt}. Insert the uploaded dog sitting on the toilet. Preserve the dog's identity (face, fur colors). Match lighting and perspective. Photorealistic, seamless blend.`,
+              num_inference_steps: 28,
+              guidance_scale: 5,
+              sync_mode: true,
+            } as any,
+            logs: true,
+          });
+          const out = result as any;
+          console.log("Inpaint raw keys:", Object.keys(out || {}));
+          const firstUrl: string | undefined =
+            (Array.isArray(out?.data?.images) && out.data.images[0]?.url) ||
+            (Array.isArray(out?.images) && out.images[0]?.url) ||
+            out?.data?.image?.url ||
+            out?.image?.url ||
+            (Array.isArray(out?.output) && (out.output[0]?.url || out.output[0]?.image?.url)) ||
+            (typeof out === 'string' && (out.startsWith('http') || out.startsWith('data:')) ? out : undefined);
+          if (firstUrl) {
+            console.log("Inpaint output type:", firstUrl.startsWith('data:') ? 'data-url' : 'url');
+            return firstUrl;
+          }
+          console.warn("Inpaint output missing URL; not falling back to Kontext.");
+          throw new Error("Inpaint did not return an image URL");
+        } catch (e: any) {
+          try {
+            console.error("Inpaint call failed:", e?.body ? JSON.stringify(e.body) : e);
+          } catch {
+            console.error("Inpaint call failed (no body)", e);
+          }
+          // Do not silently fall back when user provided a background; surface the issue
+          throw e;
+        }
+      }
+
+      // No background provided: route through FAL Kontext img2img
       {
         console.log("Using FAL flux-pro/kontext (image-to-image)...");
         const result: any = await fal.subscribe("fal-ai/flux-pro/kontext", {
           input: {
             prompt: `${scenePrompt}, photorealistic, professional lighting, bathroom setting, keep subject identity`,
             image_url: petImageUrl,
+            // Kontext doesn't support background blending; ignore bg here
             num_inference_steps: 30,
             guidance_scale: Math.max(2.5, Math.min(8, (options.identityStrength ? 6 + (options.identityStrength - 0.35) * 10 : 6))),
             image_size: (options.aspectRatio || "square") as any,
@@ -59,12 +172,15 @@ export async function composeScene(
             if (last) console.log(last);
           },
         });
-        const url: string | undefined = Array.isArray(result?.data?.images)
-          ? result.data.images[0]?.url
-          : (result?.images?.[0]?.url || result?.image?.url);
-        if (url) {
-          console.log("FAL returned URL:", url);
-          return url;
+        const urlArr = Array.isArray(result?.data?.images)
+          ? result.data.images
+          : (Array.isArray(result?.images) ? result.images : []);
+        const urlFromArr: any = Array.isArray(urlArr) && urlArr.length > 0 ? (urlArr[0]?.url || urlArr[0]) : undefined;
+        const urlDirect: any = result?.data?.image?.url || result?.image?.url;
+        const urlCandidate: any = urlFromArr || urlDirect;
+        if (typeof urlCandidate === 'string') {
+          console.log("FAL returned URL:", urlCandidate);
+          return urlCandidate;
         }
         console.warn("FAL output missing URL, falling back to Replicate");
       }
@@ -86,9 +202,9 @@ export async function composeScene(
       });
       console.log("Replicate prediction completed with URL:", url);
       return url;
-    } catch (replicateError) {
-      console.error("Replicate prediction failed, using fallback:", replicateError);
-      return petImageUrl;
+    } catch (err) {
+      console.error("composeScene failed:", err);
+      throw err;
     }
     
   } catch (error) {
@@ -235,7 +351,7 @@ export async function runAIPipeline(
 
     // Step 2: Generate scene with masked pet
     console.log(`[${uploadId}] Starting scene generation...`);
-    const sceneUrl = await composeScene(savedMaskUrl, sceneType, bgImageUrl, options);
+    const sceneUrl = await composeScene(uploadId, savedMaskUrl, sceneType, bgImageUrl, options);
     const savedSceneUrl = await saveAIResult(sceneUrl, uploadId, "scene");
     result.steps.composition = { status: "success", output: savedSceneUrl };
 

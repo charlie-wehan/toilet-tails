@@ -1,6 +1,7 @@
 import { inngest } from "@/lib/inngest";
 import { prisma } from "@/lib/db";
 import { runAIPipeline } from "@/lib/functions/aiPipeline";
+import { signStorageKey } from "@/lib/storageSign";
 
 export const renderJob = inngest.createFunction(
   { id: "render-toilet-tail", name: "Render Toilet Tail" },
@@ -28,13 +29,11 @@ export const renderJob = inngest.createFunction(
     // Step 3: Run AI Pipeline
     const aiResult = await step.run("ai-pipeline", async () => {
       try {
-        const result = await runAIPipeline(
-          uploadId,
-          upload.url,
-          scene as any,
-          upload.bgUrl || undefined,
-          options || {}
-        );
+        // Re-sign pet and background keys if we have them in DB
+        const petUrl = upload.url || (upload.key ? await signStorageKey(upload.key, 60 * 60) : "");
+        const bgUrl = upload.bgUrl || (upload.bgKey ? await signStorageKey(upload.bgKey, 60 * 60) : undefined);
+
+        const result = await runAIPipeline(uploadId, petUrl, scene as any, bgUrl, options || {});
         return result;
       } catch (error) {
         console.error("AI pipeline failed:", error);
